@@ -1,0 +1,140 @@
+# DFP: IMPORTANTE!! EL QUE SE EJECUTA ES EL .devcontainer/docker-compose.yml
+services:
+  mariadb:
+    image: docker.io/mariadb:11.8
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      - --skip-innodb-read-only-compressed # Temporary fix for MariaDB 10.6
+      # - --sql-mode=STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ZERO_DATE,NO_ZERO_IN_DATE,NO_ENGINE_SUBSTITUTION # DFP: Added ONLY_FULL_GROUP_BY!! + NO_ZERO_DATE + NO_ZERO_IN_DATE
+      # https://mariadb.com/kb/en/innodb-system-variables/#innodb_log_buffer_size
+      # 1GB for innodb
+      - --innodb-buffer-pool-size=1073741824
+      - --log-bin
+      - --log-basename=mariadb
+      - --expire-logs-days=15
+      # Allow root password change if enabled --skip-grant-tables
+      # mysql -u root
+      # flush privileges;
+      # ALTER USER 'root'@'%'  IDENTIFIED BY 'newpassword';
+      # - --skip-grant-tables
+    environment:
+      MYSQL_ROOT_PASSWORD: 123
+      MARIADB_AUTO_UPGRADE: 1
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    ports: # DFP: serve it in host localhost:3307 for Dbeaver
+      - 3307:3306 # DFP
+
+  # Enable PostgreSQL only if you use it, see development/README.md for more information.
+  # postgresql:
+  #   image: postgres:14
+  #   environment:
+  #     POSTGRES_PASSWORD: 123
+  #   volumes:
+  #     - postgresql-data:/var/lib/postgresql/data
+
+  # Enable Mailpit if you need to test outgoing mail services
+  # See https://mailpit.axllent.org/
+  #  mailpit:
+  #    image: axllent/mailpit
+  #    volumes:
+  #      - mailpit-data:/data
+  #    ports:
+  #      - 8025:8025
+  #      - 1025:1025
+  #    environment:
+  #      MP_MAX_MESSAGES: 5000
+  #      MP_DATA_FILE: /data/mailpit.db
+  #      MP_SMTP_AUTH_ACCEPT_ANY: 1
+  #      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+
+  redis-cache:
+    image: docker.io/redis:alpine
+
+  redis-queue:
+    image: docker.io/redis:alpine
+
+  frappe:
+    # user: "1001:1001" # FIX issue with .git issues ??
+    # image: docker.io/frappe/bench:latest # DFP
+    # If you want to build the current bench image the Containerfile is in this Repo.
+    # build: ../images/bench
+    build:
+      context: .
+      dockerfile: AE.bench.Dockerfile
+      # args:
+      #   HOST_UID: ${UID}
+      #   HOST_GID: ${GID}
+    command: sleep infinity
+    # environment:
+    #   - SHELL=/bin/bash
+    volumes:
+      - ..:/workspace:cached
+      # Enable if you require git cloning
+      # - ${HOME}/.ssh:/home/frappe/.ssh
+      - ${HOME}/.ssh:/home/frappe/.ssh:ro
+    working_dir: /workspace/development
+    ports:
+      # - 8000-8005:8000-8005 # DFP << port multitenancy
+      # - 9000-9005:9000-9005 # DFP << port multitenancy
+      - 8000:8000
+      - 9000:9000
+      # # minio # DFP
+      # - 10000:10000 # DFP
+    # # Share network with host
+    # network_mode: host
+
+  # enable the below service if you need Cypress UI Tests to be executed
+  # Before enabling ensure install_x11_deps.sh has been executed and display variable is exported.
+  # Run install_x11_deps.sh again if DISPLAY is not set
+  # ui-tester:
+  #   # pass custom command to start Cypress otherwise it will use the entrypoint
+  #   # specified in the Cypress Docker image.
+  #   # also pass "--project <folder>" so that when Cypress opens
+  #   # it can find file "cypress.json" and show integration specs
+  #   # https://on.cypress.io/command-line#cypress-open
+  #   entrypoint: 'sleep infinity'
+  #   image: "docker.io/cypress/included:latest"
+  #   environment:
+  #     - SHELL=/bin/bash
+  #     # get the IP address of the host machine and allow X11 to accept
+  #     # incoming connections from that IP address
+  #     #   IP=$(ipconfig getifaddr en0) or mac or \
+  #     #   IP=$($(hostname -I | awk '{print $1}') )  for Ubuntu
+  #     #   /usr/X11/bin/xhost + $IP
+  #     # then pass the environment variable DISPLAY to show Cypress GUI on the host system
+  #     #   DISPLAY=$IP:0
+  #     - DISPLAY
+  #   volumes:
+  #     # for Cypress to communicate with the X11 server pass this socket file
+  #     # in addition to any other mapped volumes
+  #     - /tmp/.X11-unix:/tmp/.X11-unix
+  #     - ..:/workspace:z,cached
+  #   network_mode: "host"
+
+  # <DFP
+  # minio:
+  #   image: minio/minio
+  #   volumes:
+  #     - minio-data:/data
+  #   environment:
+  #     MINIO_ROOT_USER: minioadmin
+  #     MINIO_ROOT_PASSWORD: minioadmin
+  #   command: server --console-address ":9501" /data
+  #   ports:
+  #     - "9500:9000"  # Puerto de la API de MinIO
+  #     - "9501:9501"  # Puerto de la Consola de Gestión de MinIO
+  #   # image: quay.io/minio/minio
+  #   # command: server --console-address ":9501" # http://minio{1...4}/data{1...2}
+  #   # expose:
+  #   #   - "9000"
+  #   #   - "9501"
+  # DFP>
+
+volumes:
+  mariadb-data:
+  #postgresql-data:
+  #mailpit-data:
+  # minio-data: # DFP

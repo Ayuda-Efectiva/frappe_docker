@@ -1,0 +1,581 @@
+# Stack: frappe-staging | frappe-prod
+# .env en Vaultwarden
+
+# IMPORTANT!! Folder with "DFP_STACK" value must existe in benches!!
+version: '3.8'
+
+services:
+  backend:
+    # image: frappe/erpnext:v14.62.2
+    image: 10.200.200.2:5000/${DFP_IMAGE_VERSION:-frappe-ae:latest}
+    deploy:
+      update_config:
+        parallelism: 1
+        delay: 20s
+        # La nueva réplica se inicia antes de detener una antigua
+        order: start-first
+        # Autodispara rollback si hay fallos
+        failure_action: rollback
+      # Auto (si falla el deploy) o manual
+      rollback_config:
+        parallelism: 1
+        delay: 10s
+        # Para primero y luego levanta las nuevas réplicas
+        order: stop-first
+        # Pausa el rollback, no las instancias que están ejecutándose
+        failure_action: pause
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      replicas: 3
+      # placement:
+      #   constraints:
+      #     - node.hostname == ae05
+      #   # preferences:
+      #   #   - spread: node.labels.geo
+    environment:
+      - TZ=Europe/Madrid
+    entrypoint:
+      - bash
+      - -c
+    command:
+      - |
+        echo "Starting...";
+        wait-for-it -t 120 mariadb_db:3306;
+        wait-for-it -t 120 redis-cache:6379;
+        wait-for-it -t 120 redis-queue:6379;
+        # wait-for-it -t 120 redis-websocket:6379;
+        echo "Initializing backend";
+        /home/frappe/frappe-bench/env/bin/gunicorn --chdir=/home/frappe/frappe-bench/sites --bind=0.0.0.0:8000 --threads=4 --workers=2 --worker-class=gthread --worker-tmp-dir=/dev/shm --timeout=120 --preload frappe.app:application;
+    # healthcheck:
+    #   test: curl -i localhost:8000 || exit 1
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+    #   start_period: 120s
+    volumes:
+      - /etc/hostname:/home/frappe/frappe-bench/swarm-hostname:ro
+      - /mnt/gluster-disk/benches/${DFP_STACK:-frappe-staging}/sites:/home/frappe/frappe-bench/sites
+      - /mnt/gluster-disk/benches/${DFP_STACK:-frappe-staging}/logs:/home/frappe/frappe-bench/logs
+      # Keep some host connection for moving files (backup ones mainly)
+      - /tmp:/host-tmp
+    networks:
+      - default
+      - mariadb-net
+
+  frontend:
+    # image: frappe/erpnext:v14.62.2
+    image: 10.200.200.2:5000/${DFP_IMAGE_VERSION:-frappe-ae:latest}
+    # depends_on:
+    #   - ${DFP_STACK:-frappe-staging}_websocket
+    #   - ${DFP_STACK:-frappe-staging}_backend
+    # command:
+    #   - nginx-entrypoint.sh
+    entrypoint:
+      - bash
+      - -c
+    command:
+      - |
+        echo "Starting...";
+        # wait-for-it -t 120 mariadb_db:3306;
+        # wait-for-it -t 120 redis-cache:6379;
+        # wait-for-it -t 120 redis-queue:6379;
+        # wait-for-it -t 120 redis-websocket:6379;
+        wait-for-it -t 120 backend:8000;
+        wait-for-it -t 120 websocket:9000;
+        echo "Initializing nginx";
+        nginx-entrypoint.sh;
+    environment:
+      BACKEND: ${DFP_STACK:-frappe-staging}_backend:8000
+      FRAPPE_SITE_NAME_HEADER: ${DFP_SITE:-staging.ayudaefectiva.org}
+      SOCKETIO: ${DFP_STACK:-frappe-staging}_websocket:9000
+      UPSTREAM_REAL_IP_ADDRESS: 127.0.0.1
+      # UPSTREAM_REAL_IP_HEADER: X-Forwarded-For
+      # X-Real-IP added within Caddy
+      UPSTREAM_REAL_IP_HEADER: X-Real-IP
+      UPSTREAM_REAL_IP_RECURSIVE: "off"
+      PROXY_READ_TIMEOUT: 900
+      CLIENT_MAX_BODY_SIZE: 50m
+      TZ: Europe/Madrid
+    # healthcheck:
+    #   test: curl -i localhost:8080/robots.txt || exit 1
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+    #   start_period: 120s
+    volumes:
+      - /etc/hostname:/home/frappe/frappe-bench/swarm-hostname:ro
+      - /mnt/gluster-disk/benches/${DFP_STACK:-frappe-staging}/sites:/home/frappe/frappe-bench/sites
+      - /mnt/gluster-disk/benches/${DFP_STACK:-frappe-staging}/logs:/home/frappe/frappe-bench/logs
+    # ports:
+    #   - "8080:8080"
+    deploy:
+      update_config:
+        parallelism: 1
+        delay: 20s
+        # La nueva réplica se inicia antes de detener una antigua
+        order: start-first
+        # Autodispara rollback si hay fallos
+        failure_action: rollback
+      # Auto (si falla el deploy) o manual
+      rollback_config:
+        parallelism: 1
+        delay: 10s
+        # Para primero y luego levanta las nuevas réplicas
+        order: stop-first
+        # Pausa el rollback, no las instancias que están ejecutándose
+        failure_action: pause
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      replicas: 3
+      # placement:
+      #   constraints:
+      #     - node.hostname == ae05
+    networks:
+      - default
+      - public-proxy
+      - mariadb-net
+    # # ONLY FOR DEBUGGING!!!! KEEPS CONTAINER LIVE WITHOUT STARTING NGINX!!!
+    # entrypoint: ["/bin/bash", "-c", "tail -f /dev/null"]
+
+    # "/home/frappe/frappe-bench/env/bin/gunicorn", \
+    # "--chdir=/home/frappe/frappe-bench/sites", \
+    # "--bind=0.0.0.0:8000", \
+    # "--threads=4", \
+    # "--workers=2", \
+    # "--worker-class=gthread", \
+    # "--worker-tmp-dir=/dev/shm", \
+    # "--timeout=120", \
+    # "--preload", \
+    # "frappe.app:application"
+
+  websocket:
+    # image: frappe/erpnext:v14.62.2
+    image: 10.200.200.2:5000/${DFP_IMAGE_VERSION:-frappe-ae:latest}
+    ports:
+      - "9000:9000"
+    # depends_on:
+    #   - redis-websocket
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      # mode: global
+      replicas: 1
+      # placement:
+      #   constraints:
+      #     - node.hostname == ae05
+    # command:
+    #   - node
+    #   - /home/frappe/frappe-bench/apps/frappe/socketio.js
+    entrypoint:
+      - bash
+      - -c
+    command:
+      - |
+        echo "Starting...";
+        # wait-for-it -t 120 mariadb_db:3306;
+        # wait-for-it -t 120 redis-cache:6379;
+        wait-for-it -t 120 redis-queue:6379;
+        # wait-for-it -t 120 redis-websocket:6379;
+        echo "Initializing node socketio";
+        node /home/frappe/frappe-bench/apps/frappe/socketio.js;
+    volumes:
+      # - /etc/hostname:/home/frappe/frappe-bench/swarm-hostname:ro
+      - /mnt/gluster-disk/benches/${DFP_STACK:-frappe-staging}/sites:/home/frappe/frappe-bench/sites
+      # - /mnt/gluster-disk/benches/${DFP_STACK:-frappe-staging}/logs:/home/frappe/frappe-bench/logs
+    networks:
+      - default
+      - public-proxy
+
+  queue-long:
+    # image: frappe/erpnext:v14.62.2
+    image: 10.200.200.2:5000/${DFP_IMAGE_VERSION:-frappe-ae:latest}
+    deploy:
+      update_config:
+        parallelism: 1
+        delay: 20s
+        # La nueva réplica se inicia antes de detener una antigua
+        order: start-first
+        # Autodispara rollback si hay fallos
+        failure_action: rollback
+      # Auto (si falla el deploy) o manual
+      rollback_config:
+        parallelism: 1
+        delay: 10s
+        # Para primero y luego levanta las nuevas réplicas
+        order: stop-first
+        # Pausa el rollback, no las instancias que están ejecutándose
+        failure_action: pause
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      replicas: 3
+      # placement:
+      #   constraints:
+      #     - node.hostname == ae05
+    # command:
+    #   - bench
+    #   - worker
+    #   - --queue
+    #   - long,default,short
+    entrypoint:
+      - bash
+      - -c
+    command:
+      - |
+        echo "Starting...";
+        # wait-for-it -t 120 mariadb_db:3306;
+        # wait-for-it -t 120 redis-cache:6379;
+        wait-for-it -t 120 redis-queue:6379;
+        # wait-for-it -t 120 redis-websocket:6379;
+        wait-for-it -t 120 backend:8000;
+        echo "Initializing bench worker";
+        bench worker --queue long,default,short;
+    environment:
+      - TZ=Europe/Madrid
+    volumes:
+      - /etc/hostname:/home/frappe/frappe-bench/swarm-hostname:ro
+      - /mnt/gluster-disk/benches/${DFP_STACK:-frappe-staging}/sites:/home/frappe/frappe-bench/sites
+      - /mnt/gluster-disk/benches/${DFP_STACK:-frappe-staging}/logs:/home/frappe/frappe-bench/logs
+    networks:
+      - default
+      - mariadb-net
+
+  queue-short:
+    # image: frappe/erpnext:v14.62.2
+    image: 10.200.200.2:5000/${DFP_IMAGE_VERSION:-frappe-ae:latest}
+    deploy:
+      update_config:
+        parallelism: 1
+        delay: 20s
+        # La nueva réplica se inicia antes de detener una antigua
+        order: start-first
+        # Autodispara rollback si hay fallos
+        failure_action: rollback
+      # Auto (si falla el deploy) o manual
+      rollback_config:
+        parallelism: 1
+        delay: 10s
+        # Para primero y luego levanta las nuevas réplicas
+        order: stop-first
+        # Pausa el rollback, no las instancias que están ejecutándose
+        failure_action: pause
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      replicas: 3
+      # placement:
+      #   constraints:
+      #     - node.hostname == ae05
+    # command:
+    #   - bench
+    #   - worker
+    #   - --queue
+    #   - short,default
+    entrypoint:
+      - bash
+      - -c
+    command:
+      - |
+        echo "Starting...";
+        # wait-for-it -t 120 mariadb_db:3306;
+        # wait-for-it -t 120 redis-cache:6379;
+        wait-for-it -t 120 redis-queue:6379;
+        # wait-for-it -t 120 redis-websocket:6379;
+        wait-for-it -t 120 backend:8000;
+        echo "Initializing bench worker";
+        bench worker --queue short,default;
+    environment:
+      - TZ=Europe/Madrid
+    volumes:
+      - /etc/hostname:/home/frappe/frappe-bench/swarm-hostname:ro
+      - /mnt/gluster-disk/benches/${DFP_STACK:-frappe-staging}/sites:/home/frappe/frappe-bench/sites
+      - /mnt/gluster-disk/benches/${DFP_STACK:-frappe-staging}/logs:/home/frappe/frappe-bench/logs
+    networks:
+      - default
+      - mariadb-net
+
+  scheduler:
+    # image: frappe/erpnext:v14.62.2
+    image: 10.200.200.2:5000/${DFP_IMAGE_VERSION:-frappe-ae:latest}
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      # ONLY ONE REPLICA FOR SCHEDULER!!
+      replicas: 1
+      # placement:
+      #   constraints:
+      #     - node.hostname == ae05
+      # #   # constraints: [node.hostname == ae-02]
+      # #   constraints: [node.hostname == ae-03]
+      # #   # constraints: [node.hostname != ae-03]
+    # command:
+    #   - bench
+    #   - schedule
+    # depends_on:
+    #   - redis-queue
+    entrypoint:
+      - bash
+      - -c
+    command:
+      - |
+        echo "Starting...";
+        # wait-for-it -t 120 mariadb_db:3306;
+        # wait-for-it -t 120 redis-cache:6379;
+        wait-for-it -t 120 redis-queue:6379;
+        # wait-for-it -t 120 redis-websocket:6379;
+        wait-for-it -t 120 backend:8000;
+        echo "Initializing bench schedule";
+        bench schedule;
+    environment:
+      - TZ=Europe/Madrid
+    volumes:
+      - /etc/hostname:/home/frappe/frappe-bench/swarm-hostname:ro
+      - /mnt/gluster-disk/benches/${DFP_STACK:-frappe-staging}/sites:/home/frappe/frappe-bench/sites
+      - /mnt/gluster-disk/benches/${DFP_STACK:-frappe-staging}/logs:/home/frappe/frappe-bench/logs
+    networks:
+      - default
+      - mariadb-net
+
+  redis-cache:
+    image: redis:7.2.4-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - /mnt/gluster-disk/benches/${DFP_STACK:-frappe-staging}/redis-cache-data:/data
+    # ports:
+    #   - "6379:6379"
+    deploy:
+      mode: replicated
+      # ONLY ONE!!
+      replicas: 1
+      # placement:
+      #   constraints:
+      #     - node.hostname == ae05
+      #     # - node.labels.geo == ams3
+      #   # preferences:
+      #   #   - spread: node.labels.geo
+    healthcheck:
+      test: redis-cli ping
+      interval: 5s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - default
+
+  redis-queue:
+    image: redis:7.2.4-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - /mnt/gluster-disk/benches/${DFP_STACK:-frappe-staging}/redis-queue-data:/data
+    # ports:
+    #   - "6379:6379"
+    deploy:
+      mode: replicated
+      # ONLY ONE!!
+      replicas: 1
+      # placement:
+      #   constraints:
+      #     - node.hostname == ae05
+      #     # - node.labels.geo == ams3
+      #   # preferences:
+      #   #   - spread: node.labels.geo
+    healthcheck:
+      test: redis-cli ping
+      interval: 5s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - default
+
+  # redis-websocket:
+  #   image: redis:7.2.4-alpine
+  #   command: redis-server --appendonly yes
+  #   volumes:
+  #     - /mnt/gluster-disk/benches/${DFP_STACK:-frappe-staging}/redis-websocket-data:/data
+  #   # ports:
+  #   #   - "6379:6379"
+  #   deploy:
+  #     mode: replicated
+  #     # ONLY ONE!!
+  #     replicas: 1
+  #     placement:
+  #       constraints:
+  #         - node.hostname == ae05
+  #         # - node.labels.geo == ams3
+  #       # preferences:
+  #       #   - spread: node.labels.geo
+  #   healthcheck:
+  #     test: redis-cli ping
+  #     interval: 5s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 30s
+  #   networks:
+  #     - default
+
+  # configurator:
+  #   # image: frappe/erpnext:v14.62.2
+  #   image: 10.200.200.2:5000/${DFP_IMAGE_VERSION:-frappe-ae:latest}
+  #   deploy:
+  #     restart_policy:
+  #       condition: none
+  #   entrypoint:
+  #     - bash
+  #     - -c
+  #   command:
+  #     - |
+  #       echo "Configurator started...";
+  #       if [ ! -f sites/apps.txt ]; then
+  #         ls -1 apps > sites/apps.txt;
+  #         echo "apps.txt populated...";
+  #       fi;
+  #       if [ ! -f sites/common_site_config.json ]; then
+  #         echo '{}' > sites/common_site_config.json;
+  #         echo "common_site_config.json created...";
+  #         ########
+  #         # GLOBAL CONFIG
+  #         bench set-config -g db_host $$DB_HOST;
+  #         bench set-config -gp db_port $$DB_PORT;
+  #         bench set-config -gp ae_swarm_hosts_conf_overrides '{ "ae-03": {"db_host": "mariadb-haproxy-london_mariadb-haproxy", "db_port": "3336" } }';
+  #         bench set-config -g redis_cache "redis://$$REDIS_CACHE";
+  #         bench set-config -g redis_queue "redis://$$REDIS_QUEUE";
+  #         bench set-config -g redis_socketio "redis://$$REDIS_WEBSOCKET";
+  #         bench set-config -gp socketio_port $$SOCKETIO_PORT;
+  #         ########
+  #         # AE: OUR CUSTOM CONFIG
+  #         bench set-config -g allow_reads_during_maintenance 1;
+  #         bench set-config -g disable_global_search 1;
+  #         bench set-config -g monitor 0;
+  #         if [ "$DFP_STACK" = "frappe-prod" ]; then
+  #           # AE: PROD ONLY
+  #           echo "ALERT!! IN PROD MODE!!";
+  #           # bench set-config -g disable_scheduler 0;
+  #           bench set-config -g disable_scheduler 1;
+  #           bench set-config -g disable_error_snapshot 1;
+  #         else
+  #           # AE: STAGING ONLY
+  #           echo "STAGING MODE...";
+  #           bench set-config -g disable_scheduler 1;
+  #           bench set-config -g disable_website_cache 1;
+  #         fi;
+  #         echo "common_site_config.json populated...";
+  #         ########
+  #       fi;
+  #       if [ -f image-version.txt ]; then
+  #         bench set-config -g image_version $$(cat image-version.txt);
+  #         echo "Image version updated...";
+  #       fi;
+  #       echo "Configurator done :)!";
+  #   environment:
+  #     DB_HOST: mariadb_db
+  #     DB_PORT: "3306"
+  #     REDIS_CACHE: redis-cache:6379
+  #     REDIS_QUEUE: redis-queue:6379
+  #     REDIS_WEBSOCKET: redis-websocket:6379
+  #     SOCKETIO_PORT: "9000"
+  #   volumes:
+  #     - /etc/hostname:/home/frappe/frappe-bench/swarm-hostname:ro
+  #     - /mnt/gluster-disk/benches/${DFP_STACK:-frappe-staging}/sites:/home/frappe/frappe-bench/sites
+  #     - /mnt/gluster-disk/benches/${DFP_STACK:-frappe-staging}/logs:/home/frappe/frappe-bench/logs
+  #   networks:
+  #     - default
+  #     - mariadb-net
+
+  # create-site:
+  #   # image: frappe/erpnext:v14.62.2
+  #   image: 10.200.200.2:5000/${DFP_IMAGE_VERSION:-frappe-ae:latest}
+  #   deploy:
+  #     restart_policy:
+  #       condition: none
+  #   volumes:
+  #     - /etc/hostname:/home/frappe/frappe-bench/swarm-hostname:ro
+  #     - /mnt/gluster-disk/benches/${DFP_STACK:-frappe-staging}/sites:/home/frappe/frappe-bench/sites
+  #     - /mnt/gluster-disk/benches/${DFP_STACK:-frappe-staging}/logs:/home/frappe/frappe-bench/logs
+  #   networks:
+  #     - default
+  #     - mariadb-net
+  #   entrypoint:
+  #     - bash
+  #     - -c
+  #   command:
+  #     - |
+  #       echo "Site creation started...";
+  #       wait-for-it -t 120 mariadb_db:3306;
+  #       wait-for-it -t 120 redis-cache:6379;
+  #       wait-for-it -t 120 redis-queue:6379;
+  #       wait-for-it -t 120 redis-websocket:6379;
+  #       export start=`date +%s`;
+  #       until [[ -n `grep -hs ^ sites/common_site_config.json | jq -r ".db_host // empty"` ]] && \
+  #         [[ -n `grep -hs ^ sites/common_site_config.json | jq -r ".redis_cache // empty"` ]] && \
+  #         [[ -n `grep -hs ^ sites/common_site_config.json | jq -r ".redis_queue // empty"` ]];
+  #       do
+  #         echo "Waiting for sites/common_site_config.json to be created";
+  #         sleep 5;
+  #         if (( `date +%s`-start > 120 )); then
+  #           echo "could not find sites/common_site_config.json with required keys";
+  #           exit 1;
+  #         fi;
+  #       done;
+  #       echo "sites/common_site_config.json found";
+  #       if [ ! -d "sites/${DFP_SITE:-staging.ayudaefectiva.org}" ]; then
+  #         echo "Creating site '${DFP_SITE:-staging.ayudaefectiva.org}'...";
+  #         bench new-site --no-mariadb-socket --admin-password admin --db-root-password=${DFP_DB_ROOT_PASSWORD:?DFP_DB_ROOT_PASSWORD is not defined} --db-name ${DFP_SITE:-staging.ayudaefectiva.org} --set-default ${DFP_SITE:-staging.ayudaefectiva.org};
+  #         bench install-app erpnext;
+  #         bench install-app ae_data;
+  #         bench install-app ae_site;
+  #         ########
+  #         # AE: OUR CUSTOM CONFIG
+  #         bench set-config -p max_reports_per_user 15;
+  #         bench set-config lang "es";
+  #         bench set-config -p markdown '{ "footnote_title": "Vuelve a la cita %d en el texto.", "footnote_return_symbol": "<i class=caret caret-up></i>", "extras": { "fenced-code-blocks": "", "tables": "", "header-ids": "", "markdown-in-html": {}, "footnotes": "", "html-classes": { "table": "table table-bordered", "img": "screenshot" } } }';
+  #         bench set-config -p ae_prod_domains '["ayudaefectiva.org"]';
+  #         bench set-config host_name "https://${DFP_SITE:-staging.ayudaefectiva.org}";
+  #         bench set-config -p user_type_doctype_limit '{"employee_self_service": 10}';
+  #         bench set-config encryption_key "${DFP_ENCRYPTION_KEY:?DFP_ENCRYPTION_KEY is not defined}";
+  #         bench set-config ae_github_webhooks_secret "${DFP_GITHUB_HOOK_SECRET:?DFP_GITHUB_HOOK_SECRET is not defined}";
+  #         ########
+
+  #         if [ "$DFP_STACK" = "frappe-prod" ]; then
+  #           # AE: PROD ONLY
+  #           echo "ALERT!! IN PROD MODE!!";
+  #           bench set-config ae_env "prod";
+  #           bench set-config -p ae_domains '["ayudaefectiva.org", "prod.ayudaefectiva.org"]';
+  #           bench set-config ae_stripe_api_key "${DFP_STRIPE_API_KEY_PROD:?DFP_STRIPE_API_KEY_PROD is not defined}";
+  #           bench set-config -p ae_stripe_endpoint_secrets '{"ayudaefectiva.org": "${DFP_STRIPE_ENDPOINT_SECRET_PROD:?DFP_STRIPE_ENDPOINT_SECRET_PROD is not defined}"}';
+  #         else
+  #           # AE: STAGING ONLY
+  #           bench set-config ae_env "preprod";
+  #           bench set-config -p ae_domains '["staging.ayudaefectiva.org"]';
+  #           bench set-config ae_stripe_api_key "${DFP_STRIPE_API_KEY_STAGING:?DFP_STRIPE_API_KEY_STAGING is not defined}";
+  #           bench set-config -p ae_stripe_endpoint_secrets '{"staging.ayudaefectiva.org": "${DFP_STRIPE_ENDPOINT_SECRET_STAGING:?DFP_STRIPE_ENDPOINT_SECRET_STAGING is not defined}"}';
+  #         fi;
+  #         echo "You must restore database backup for site '${DFP_SITE:-staging.ayudaefectiva.org}'.";
+  #       else
+  #         echo "Site '${DFP_SITE:-staging.ayudaefectiva.org}' already exists.";
+  #       fi;
+  #       echo "Site creation done :)!";
+
+networks:
+  public-proxy:
+    external: true
+  mariadb-net:
+    external: true
+  default:
+    driver: overlay

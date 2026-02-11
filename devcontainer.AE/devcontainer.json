@@ -1,0 +1,116 @@
+{
+  "name": "Frappe Bench",
+  "forwardPorts": [8000, 9000, 6787],
+  "remoteUser": "frappe",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-vscode.live-server",
+        "grapecity.gc-excelviewer",
+        "visualstudioexptteam.vscodeintellicode",
+        "mhutchie.git-graph",
+        "ambooth.git-rename",
+        "waderyan.gitblame",
+        "Vue.volar",
+        "xyz.local-history",
+        "Gruntfuggly.todo-tree",
+        "eamodio.gitlens",
+        "donjayamanne.githistory",
+        "amodio.restore-editors",
+        "madtiago.file-badge",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "EditorConfig.EditorConfig",
+        "samuelcolvin.jinjahtml",
+        "cweijan.vscode-mysql-client2"
+      ],
+      "settings": {
+        "terminal.integrated.profiles.linux": {
+          "bash": {
+            "path": "/bin/bash",
+            "args": ["-l"]
+          }
+        },
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "terminal.integrated.automationProfile.linux": {
+          "path": "/bin/bash",
+          "args": ["-l"]
+        },
+        "debug.node.autoAttach": "disabled",
+        "workbench.settings.enableNaturalLanguageSearch": false,
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "[javascript]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[vue]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[scss]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[jinja-html]": {
+          "editor.defaultFormatter": "samuelcolvin.jinjahtml"
+        },
+        "files.associations": {
+          "*.html": "jinja-html"
+        },
+        "python.defaultInterpreterPath": "./frappe-bench/env/bin/",
+        "python.analysis.extraPaths": [
+          "./frappe-bench/apps/frappe",
+          "./frappe-bench/apps/erpnext",
+          "./frappe-bench/apps/ae_data",
+          "./frappe-bench/apps/ae_site"
+        ],
+        "python.autoComplete.extraPaths": [
+          "./frappe-bench/apps/frappe",
+          "./frappe-bench/apps/erpnext",
+          "./frappe-bench/apps/ae_data",
+          "./frappe-bench/apps/ae_site"
+        ],
+        "sqltools.connections": [
+          {
+            "mysqlOptions": {
+              "authProtocol": "default",
+              "enableSsl": "Disabled"
+            },
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "mariadb",
+            "port": 3306,
+            "driver": "MariaDB",
+            "name": "mariadb",
+            "username": "root",
+            "password": "123"
+          }
+        ],
+        "search.exclude": {
+          "**/.vscode": true,
+          "**/.continue": true,
+          "**/dist": true,
+          "**/env": true,
+          "**/logs": true,
+          "**/sites": true,
+          "**/vscode-example": true
+        },
+        "editor.wordWrap": "on",
+        "python.analysis.typeCheckingMode": "basic",
+        "editor.insertSpaces": false,
+        "git.autoRepositoryDetection": true,
+        "git.scanRepositories": ["./frappe-bench/apps/"],
+        "git.repositoryScanMaxDepth": 5,
+        "telemetry.feedback.enabled": false
+      }
+    }
+  },
+  // "updateRemoteUserUID": true,
+  "runServices": ["frappe", "mariadb", "redis-cache", "redis-queue"],
+  "dockerComposeFile": "./docker-compose.yml",
+  "service": "frappe",
+  "workspaceFolder": "/workspace/development",
+  "shutdownAction": "stopCompose",
+  "mounts": [
+    "source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/frappe/.ssh,type=bind,consistency=cached"
+  ]
+}

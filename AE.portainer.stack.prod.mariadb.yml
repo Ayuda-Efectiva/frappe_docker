@@ -1,0 +1,61 @@
+# Stack: mariadb
+# .env en Vaultwarden
+
+version: '3.8'
+services:
+  db:
+    image: mariadb:10.6
+    # healthcheck:
+    #   test: mysqladmin ping -h localhost --password=${DFP_DB_ROOT_PASSWORD:?DFP_DB_ROOT_PASSWORD is not defined}
+    #   interval: 10s      # Intervalo más largo entre chequeos
+    #   timeout: 5s        # Tiempo máximo para esperar una respuesta
+    #   retries: 5         # Menor número de reintentos
+    #   start_period: 30s # Periodo antes de iniciar los chequeos
+    deploy:
+      replicas: 1
+      # restart_policy:
+      #   # Suena raro, pero este servicio no queremos que se reinicie bajo ningún concepto
+      #   condition: none
+      resources:
+        limits:
+          cpus: '6'
+          memory: 5G
+        # reservations:
+        #   cpus: '0.25'
+      # placement:
+      #   # constraints: [node.hostname == ae-02]
+      #   constraints:
+      #     - node.hostname == ae05
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      - --skip-innodb-read-only-compressed # Temporary fix for MariaDB 10.6
+      # https://mariadb.com/kb/en/innodb-system-variables/#innodb_log_buffer_size
+      # 1GB for innodb
+      - --innodb-buffer-pool-size=1073741824
+      - --log-bin
+      - --log-basename=mariadb
+      - --expire-logs-days=15
+      # Allow root password change if enabled --skip-grant-tables
+      # mysql -u root
+      # flush privileges;
+      # ALTER USER 'root'@'%'  IDENTIFIED BY 'newpassword';
+      # - --skip-grant-tables
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DFP_DB_ROOT_PASSWORD:?DFP_DB_ROOT_PASSWORD is not defined}
+      # MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 1
+    ports:
+      - "3306:3306"
+    volumes:
+      - /root/ae-data/mariadb-data:/var/lib/mysql
+    networks:
+      - default
+      - mariadb-net
+# volumes:
+#   frappe-db-data:
+networks:
+  mariadb-net:
+    external: true
+  default:
+    driver: overlay
