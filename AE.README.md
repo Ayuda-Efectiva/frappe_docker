@@ -19,12 +19,210 @@ ln -s devcontainer.AE .devcontainer
 
 WIP
 
-... Devpods!!
 
 
-## Create bench
+## Create bench within DevPod (only once; first time)
 
-WIP
+Source: ./devcontainer.AE/AE.bench.Dockerfile
+
+Within devpod container: Devpod: Open `frappe_docker_ae` folder: Open
+
+Go to terminal, then:
+
+```bash
+# Remove error for hardlinks when folder binded
+export UV_LINK_MODE=copy
+
+# Create bench
+bench init --frappe-branch=version-16 --frappe-path=https://github.com/Ayuda-Efectiva/frappe --no-procfile --no-backups --skip-redis-config-generation --skip-assets --verbose /workspace/development/frappe-bench
+
+cd frappe-bench
+```
+Create file `Procfile` with below content:
+
+```bash
+vi Procfile
+```
+
+```bash
+web: bench serve --port 8000
+socketio: node apps/frappe/socketio.js
+watch: bench watch
+schedule: bench schedule
+worker: bench worker 1>> logs/worker.log 2>> logs/worker.error.log
+```
+
+Create `honcho.sh`, make it executable...
+
+```bash
+touch honcho.sh && chmod +x honcho.sh && vi honcho.sh
+```
+
+...fill with below content:
+
+
+```bash
+#!/bin/bash
+
+# DFP: Run all services within Procfile except `web` (we use debugger for that :)
+honcho start socketio watch worker schedule worker
+```
+
+### Set some defaults
+
+```bash
+bench set-config -gp developer_mode 1
+bench set-config -g scheduler disable
+bench set-config -g db_host mariadb
+bench set-config -g db_type mariadb
+bench set-config -g redis_cache redis://redis-cache:6379
+bench set-config -g redis_queue redis://redis-queue:6379
+bench set-config -g redis_socketio redis://redis-queue:6379
+```
+
+### Vscode default settings
+
+```bash
+mkdir -p .vscode && cp vscode-example/* .vscode/
+```
+
+### Install main apps
+
+```bash
+bench get-app https://github.com/Ayuda-Efectiva/erpnext --branch version-16 --skip-assets
+bench get-app https://github.com/frappe/insights --branch main --skip-assets
+
+
+
+
+# TODO: PENDIENTE!!!
+# TODO: PENDIENTE!!!
+bench get-app https://github.com/Ayuda-Efectiva/ae_data.git --branch main --skip-assets
+bench get-app https://github.com/Ayuda-Efectiva/ae_site.git --branch main --skip-assets
+
+
+# # TODO: CAMBIAR A MAIN!!
+# bench get-app https://github.com/developmentforpeople/dfp_external_storage.git --branch version-15 --skip-assets
+
+
+# Migrate DB with apps
+bench migrate
+
+# Build assets for all apps
+bench build
+
+
+
+
+# Create site
+bench new-site --db-name ayudaefectiva --db-host mariadb --db-root-username root --db-root-password 123 --mariadb-user-host-login-scope="172.%.%.%" --verbose ayudaefectiva.localhost
+# --install-app erpnext
+# 
+
+# Set as default
+bench use ayudaefectiva.localhost
+
+# Install apps
+bench install-app erpnext insights
+
+
+
+
+
+
+
+
+
+
+# bench migrate
+# bench build
+
+### Create site
+
+
+
+
+
+
+
+
+
+
+
+## Start framework
+
+```bash
+cd frappe-bench
+bench start
+# Open http://ayudaefectiva.localhost:8000
+```
+
+## Start framework with debugger
+
+```bash
+cd frappe-bench
+./honcho.sh
+# VSCode: Run & Debug: Bench Web
+# Open http://ayudaefectiva.localhost:8000
+```
+
+
+
+
+
+
+
+# # Fix for "ModuleNotFoundError: No module named 'pkg_resources'" when creating new-site
+# rm -fr env
+# bench setup env --python /home/frappe/.local/bin/python3.10
+# bench setup requirements
+
+
+
+# bench get-app https://github.com/Ayuda-Efectiva/erpnext --branch ${FRAPPE_BRANCH} --skip-assets
+
+# bench get-app https://github.com/Ayuda-Efectiva/ae_data.git --branch main --skip-assets
+# bench get-app https://github.com/Ayuda-Efectiva/ae_site.git --branch main --skip-assets
+
+# bench get-app https://github.com/frappe/insights --branch main --skip-assets
+# # TODO: CAMBIAR A MAIN!!
+# bench get-app https://github.com/developmentforpeople/dfp_external_storage.git --branch version-15 --skip-assets
+
+
+
+
+# Create site
+bench new-site --db-name ayudaefectiva --db-host mariadb --db-root-username root --db-root-password 123 --mariadb-user-host-login-scope="172.%.%.%" --verbose ayudaefectiva.localhost
+# --install-app erpnext
+# 
+
+
+bench use ayudaefectiva.localhost
+
+bench migrate
+bench build
+
+
+
+
+
+
+
+
+
+
+bench get-app https://github.com/Ayuda-Efectiva/ae_data.git --branch main --skip-assets
+bench get-app https://github.com/Ayuda-Efectiva/ae_site.git --branch main --skip-assets
+
+
+# Delete site (only if needed)
+bench drop-site --db-root-username root --db-root-password 123 --force ayudaefectiva.localhost
+
+# bench --site ayudaefectiva.localhost install-app erpnext
+bench --site ayudaefectiva.localhost install-app ae_data
+bench --site ayudaefectiva.localhost install-app ae_site
+
+
 
 ### Install apps
 

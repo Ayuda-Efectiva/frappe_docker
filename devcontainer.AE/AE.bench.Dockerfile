@@ -1,18 +1,22 @@
 # DFP Extendemos la imagen original de Frappe con nuestros settings
-FROM frappe/bench:latest
+# DFP: TODO: ir actualizando! No dejamos latest porque no es necesario tener la última versión del bench y te realentiza mucho el arranque cada vez que sale una nueva.
+# FROM frappe/bench:latest
+FROM frappe/bench:v5.29.1
+# https://hub.docker.com/r/frappe/bench/tags
 
 # # Forzar shell bash para "frappe"
 # RUN sudo usermod -s /bin/bash "$(whoami)"
 # #SHELL ["/bin/bash", "-lc"]
 
-# # IMPORTANTE PARA QUE FUNCIONEN LOS BINDS (.ssh/*, github, etc)
-# # Obtener los UID y GUID del usuario actual en el host
-# # id -u   # UID y ajustarlo en .env
-# # id -g   # GID y ajustarlo en .env
-# # 1000 son los valores por defecto si no se pasan en el docker-compose!
-# ARG HOST_UID=1000
-# ARG HOST_GID=1000
-# RUN sudo groupmod -o -g ${HOST_GID} frappe && sudo usermod -o -u ${HOST_UID} -g ${HOST_GID} frappe
+# TODO: ESTO NO ES LO MÁS BONITO PERO
+# IMPORTANTE PARA QUE FUNCIONEN LOS BINDS (.ssh/*, github, etc)
+# Obtener los UID y GUID del usuario actual en el host
+# id -u   # UID y ajustarlo en .env
+# id -g   # GID y ajustarlo en .env
+# 1000 son los valores por defecto si no se pasan en el docker-compose!
+ARG HOST_UID=1001
+ARG HOST_GID=1001
+RUN sudo groupmod -o -g ${HOST_GID} frappe && sudo usermod -o -u ${HOST_UID} -g ${HOST_GID} frappe
 
 # # Instalar software-properties-common para manejar repositorios adicionales (si es necesario)
 # # Actualizar la lista de paquetes y reparar posibles problemas

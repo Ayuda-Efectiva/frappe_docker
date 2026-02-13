@@ -1,3 +1,4 @@
+// DFP: help: https://github.com/devcontainers/spec/blob/main/docs/specs/devcontainer-reference.md
 {
   "name": "Frappe Bench",
   "forwardPorts": [8000, 9000, 6787],
@@ -26,6 +27,9 @@
         "cweijan.vscode-mysql-client2"
       ],
       "settings": {
+        // // TODO: check if needed to allow work SSH agent forwarding: https://github.com/microsoft/vscode-remote-release/issues/9819
+        // "remote.SSH.useExecServer": false, // DFP workaround para evitar el SSH_AUTH_SOCK “stale”
+        // "remote.SSH.enableAgentForwarding": true, // DFP workaround para evitar el SSH_AUTH_SOCK “stale”
         "terminal.integrated.profiles.linux": {
           "bash": {
             "path": "/bin/bash",
@@ -104,13 +108,13 @@
       }
     }
   },
-  // "updateRemoteUserUID": true,
+  "updateRemoteUserUID": true, // Avoid issues with UID & GUID for host binds
   "runServices": ["frappe", "mariadb", "redis-cache", "redis-queue"],
   "dockerComposeFile": "./docker-compose.yml",
   "service": "frappe",
   "workspaceFolder": "/workspace/development",
   "shutdownAction": "stopCompose",
   "mounts": [
-    "source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/frappe/.ssh,type=bind,consistency=cached"
+    "source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/frappe/.ssh,type=bind,readonly"
   ]
 }
