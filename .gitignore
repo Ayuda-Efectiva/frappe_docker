@@ -9,6 +9,12 @@ development/*
 !development/installer.py
 !development/apps-example.json
 !development/vscode-example/
+# <DFP. AE
+!development/.kilocodemodes
+!development/AGENTS.md
+!development/honcho.sh
+!development/Procfile
+# DFP. AE>
 
 # Pycharm
 .idea
